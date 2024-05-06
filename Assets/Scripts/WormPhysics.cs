@@ -14,33 +14,7 @@ public class WormPhysics : MonoBehaviour
     public float minAcceleration = -6f;
     public float currentAcceleration = 0;
 
-    public float topSpeed = 10f; // Define the top speed of your worm
-    public float currentSpeed;
-
-    public float baseForceMagnitude = 10f;
-    public float currentForceMagnitude = 0f;
-    public float forceIncreaseRate = 5f;
-
     public float torqueAmount = 20f; // Added torque amount for turning
-
-
-
-    public float offsetFront = 0.75f;
-    public float offsetBack = 0.75f;
-
-    private Vector3 currentForceDirection = Vector3.zero;
-    public float directionChangeSpeed = 5f;  // Control how quickly the force direction changes
-
-
-    public void ApplyForce(Rigidbody rb, Vector3 direction, float forceMagnitude) {
-        // Apply a minimum threshold force to overcome initial inertia
-        float effectiveForce = forceMagnitude + (forceMagnitude == 0 ? 0 : (forceMagnitude > 0 ? 15 : -15));
-        Vector3 appliedForce = direction * effectiveForce;
-        rb.AddForce(appliedForce, ForceMode.Force);
-
-        Debug.DrawRay(rb.position, appliedForce, Color.red, 0.1f);
-    }
-
 
     // Start is called before the first frame update
     void Start() {
@@ -51,46 +25,76 @@ public class WormPhysics : MonoBehaviour
         }
     }
     void Update() {
+
         HandleTurning();
         HandleMovement();
+
+AdjustRotation();
+        
     }
+    
+    
+    void AdjustRotation() {
+        RaycastHit hit;
+        if (Physics.Raycast(wormHead.position, -Vector3.up, out hit, 1.5f)) {
+            Vector3 newForward = Vector3.Cross(wormHead.transform.TransformDirection(Vector3.right), hit.normal);
+            Quaternion targetRotation = Quaternion.LookRotation(newForward, hit.normal);
+            wormHead.transform.rotation = Quaternion.Slerp(wormHead.transform.rotation, targetRotation, Time.deltaTime * 2f);
+        }
+    }
+
+    private float currentTorque = 0f;
+    private float torqueVelocity = 0f;
+    public float torqueSmoothTime = 0.3f; // Time taken to reach the target torque, adjust as needed
+
+    void ApplyTorque(float targetTorque) {
+        currentTorque = Mathf.SmoothDamp(currentTorque, targetTorque, ref torqueVelocity, torqueSmoothTime);
+        wormHead.AddTorque(new Vector3(0, currentTorque, 0), ForceMode.Force);
+    }
+
 
     void HandleTurning() {
+        float targetTorque = 0f;
         if (Input.GetKey(KeyCode.RightArrow)) {
-        wormHead.AddTorque(0, torqueAmount, 0, ForceMode.Force); // Adjust the torqueAmount to get the desired turning speed
-    } else if (Input.GetKey(KeyCode.LeftArrow)) {
-        wormHead.AddTorque(0, -torqueAmount, 0, ForceMode.Force);
-    }
+            targetTorque = torqueAmount;
+        } else if (Input.GetKey(KeyCode.LeftArrow)) {
+            targetTorque = -torqueAmount;
+        }
+        ApplyTorque(targetTorque);
     }
 
-    public void HandleMovement() {
-        Vector3 desiredDirection = Vector3.zero;
+        
+    public float movementForce = 10f;  // The force to apply for moving forward or backward
+    public float brakingForce = 20f;   // Stronger force applied for braking
+
+    public Quaternion previousRotation;
+
+    void HandleMovement() {
+        Vector3 forwardForceDirection = wormHead.transform.forward;
+        float rotationChangeMagnitude = Quaternion.Angle(wormHead.transform.rotation, previousRotation);
+
+        float forceModifier = Mathf.Clamp01((90 - rotationChangeMagnitude) / 90);  // Reduces force as rotation change increases
+
         if (Input.GetKey(KeyCode.UpArrow)) {
-            desiredDirection = wormHead.transform.forward;
-            currentAcceleration += accelerationIncrement * Time.deltaTime;
+            wormHead.AddForce(forwardForceDirection * movementForce * forceModifier, ForceMode.Force);
         } else if (Input.GetKey(KeyCode.DownArrow)) {
-            desiredDirection = -wormHead.transform.forward;
-            currentAcceleration -= accelerationIncrement * Time.deltaTime;
-        } else {
-            // Gradually reduce the acceleration towards zero when no key is pressed
-            if (Mathf.Abs(currentAcceleration) > 0) {
-                currentAcceleration -= Mathf.Sign(currentAcceleration) * accelerationIncrement *2* Time.deltaTime;
-                currentAcceleration = (Mathf.Abs(currentAcceleration) < 0.01f) ? 0 : currentAcceleration;
-            }
+            wormHead.AddForce(-forwardForceDirection * movementForce * forceModifier, ForceMode.Force);
         }
 
-        // Clamp the acceleration to its maximum and minimum values
-        currentAcceleration = Mathf.Clamp(currentAcceleration, minAcceleration, maxAcceleration);
-
-        // Smoothly update the current force direction towards the desired direction
-        currentForceDirection = Vector3.Lerp(currentForceDirection, desiredDirection, Time.deltaTime * directionChangeSpeed);
-
-        // Apply the force in the current (smoothly updated) direction
-        if (currentForceDirection != Vector3.zero) {
-            ApplyForce(wormHead, currentForceDirection.normalized, Mathf.Abs(currentAcceleration));
-        }
+        previousRotation = wormHead.transform.rotation;
     }
+
+
+void ApplyForceAtPoint(Vector3 point, Vector3 force) {
+    wormHead.AddForceAtPosition(force, point, ForceMode.Force);
+    Debug.DrawRay(point, force, Color.red);  // Visualize the force application
+}
+
 
 
 
 }
+
+
+
+
