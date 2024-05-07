@@ -4,35 +4,51 @@ using UnityEngine;
 
 public class WormPhysics : MonoBehaviour
 {
+
+    
+    private float currentTorque = 0f;
+    private float torqueVelocity = 0f;
+    public float torqueSmoothTime = 0.3f; // Time taken to reach the target torque, adjust as needed
+
+
     [SerializeField]
     Rigidbody wormHead;
-
     [SerializeField] private List<Rigidbody> bodySegments;
 
-    public float maxAcceleration = 15f;
-    public float accelerationIncrement = 0.5f;
-    public float minAcceleration = -6f;
-    public float currentAcceleration = 0;
+    public float torqueAmount = 20f;
+    public float baseMovementForce = 15f;
+    public float segmentDecrementFactor = 0.1f;
+    private float currentMovementForce;
+    public float maxSpeed = 20f;  // Maximum speed that worm can reach
+    public float accelerationRate = 0.2f;  // Rate at which speed increases
+    private float currentSpeed;  // Current speed of the worm
 
-    public float torqueAmount = 20f; // Added torque amount for turning
-
-    // Start is called before the first frame update
-    void Start() {
+   void Start() {
         bodySegments = new List<Rigidbody>();
         var segments = GameObject.FindGameObjectsWithTag("Worm");
         foreach (var segment in segments) {
             bodySegments.Add(segment.GetComponent<Rigidbody>());
         }
-    }
-    void Update() {
+        UpdateMovementForce();
+        currentSpeed = baseMovementForce;
+        foreach (Rigidbody segment in bodySegments) {
+            segment.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            segment.angularDrag = 10f;  // Tune based on need
+        }
 
+    }
+
+    void Update() {
         HandleTurning();
         HandleMovement();
-
-AdjustRotation();
-        
+        AdjustRotation();
     }
-    
+
+    void UpdateMovementForce() {
+        currentMovementForce = baseMovementForce + (bodySegments.Count * segmentDecrementFactor);
+        currentMovementForce = Mathf.Max(currentMovementForce, 5); // Ensure there's a minimum force
+        wormHead.mass = wormHead.mass + bodySegments.Count;
+    }
     
     void AdjustRotation() {
         RaycastHit hit;
@@ -43,15 +59,28 @@ AdjustRotation();
         }
     }
 
-    private float currentTorque = 0f;
-    private float torqueVelocity = 0f;
-    public float torqueSmoothTime = 0.3f; // Time taken to reach the target torque, adjust as needed
+    void HandleMovement() {
+        Vector3 forwardForceDirection = wormHead.transform.forward;
+        if (Input.GetKey(KeyCode.UpArrow)) {
+            currentSpeed += accelerationRate * Time.deltaTime;  // Increase speed
+            currentSpeed = Mathf.Clamp(currentSpeed, 20, maxSpeed);  // Clamp speed between minimum and maximum
+            wormHead.AddForce(forwardForceDirection * currentSpeed, ForceMode.Force);
+        } else if (Input.GetKey(KeyCode.DownArrow)) {
+            currentSpeed -= accelerationRate * Time.deltaTime;  // Decrease speed
+            currentSpeed = Mathf.Clamp(currentSpeed, 20, maxSpeed);  // Clamp speed between minimum and maximum
+            wormHead.AddForce(forwardForceDirection * currentSpeed, ForceMode.Force);
+        } else {
+            currentSpeed = 0;  // Reset to base speed if no keys are pressed
+            currentSpeed = Mathf.Clamp(currentSpeed, 0, maxSpeed);  // Clamp speed between minimum and maximum
+            wormHead.AddForce(forwardForceDirection * currentSpeed, ForceMode.Force);
+        }
+        
+    }
 
     void ApplyTorque(float targetTorque) {
         currentTorque = Mathf.SmoothDamp(currentTorque, targetTorque, ref torqueVelocity, torqueSmoothTime);
         wormHead.AddTorque(new Vector3(0, currentTorque, 0), ForceMode.Force);
     }
-
 
     void HandleTurning() {
         float targetTorque = 0f;
@@ -62,35 +91,6 @@ AdjustRotation();
         }
         ApplyTorque(targetTorque);
     }
-
-        
-    public float movementForce = 10f;  // The force to apply for moving forward or backward
-    public float brakingForce = 20f;   // Stronger force applied for braking
-
-    public Quaternion previousRotation;
-
-    void HandleMovement() {
-        Vector3 forwardForceDirection = wormHead.transform.forward;
-        float rotationChangeMagnitude = Quaternion.Angle(wormHead.transform.rotation, previousRotation);
-
-        float forceModifier = Mathf.Clamp01((90 - rotationChangeMagnitude) / 90);  // Reduces force as rotation change increases
-
-        if (Input.GetKey(KeyCode.UpArrow)) {
-            wormHead.AddForce(forwardForceDirection * movementForce * forceModifier, ForceMode.Force);
-        } else if (Input.GetKey(KeyCode.DownArrow)) {
-            wormHead.AddForce(-forwardForceDirection * movementForce * forceModifier, ForceMode.Force);
-        }
-
-        previousRotation = wormHead.transform.rotation;
-    }
-
-
-void ApplyForceAtPoint(Vector3 point, Vector3 force) {
-    wormHead.AddForceAtPosition(force, point, ForceMode.Force);
-    Debug.DrawRay(point, force, Color.red);  // Visualize the force application
-}
-
-
 
 
 }
