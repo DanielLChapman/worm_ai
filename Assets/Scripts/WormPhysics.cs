@@ -25,10 +25,17 @@ public class WormPhysics : MonoBehaviour
 
    void Start() {
         bodySegments = new List<Rigidbody>();
-        var segments = GameObject.FindGameObjectsWithTag("Worm");
-        foreach (var segment in segments) {
-            bodySegments.Add(segment.GetComponent<Rigidbody>());
+        GameObject[] wormObjects = GameObject.FindGameObjectsWithTag("Worm");  // Find all GameObjects tagged with "Worm"
+        Debug.Log(wormObjects[0]);
+        foreach (GameObject worm in wormObjects) {
+            foreach (Transform child in worm.transform) {  // Iterate over each child of the worm GameObject
+                Rigidbody rb = child.GetComponent<Rigidbody>();  // Get the Rigidbody component from the child
+                if (rb != null) {
+                    bodySegments.Add(rb);  // Add the Rigidbody to the bodySegments list
+                }
+            }
         }
+
         UpdateMovementForce();
         currentSpeed = baseMovementForce;
         foreach (Rigidbody segment in bodySegments) {
@@ -91,6 +98,52 @@ public class WormPhysics : MonoBehaviour
         }
         ApplyTorque(targetTorque);
     }
+
+    public GameObject segmentPrefab;
+
+    void AddSegment() {
+        // Find the last segment before the end piece
+        Rigidbody lastSegment = bodySegments[bodySegments.Count - 2];
+
+        // Instantiate the new segment
+        GameObject newSegment = Instantiate(segmentPrefab, lastSegment.position - lastSegment.transform.forward * 0.2f, Quaternion.identity);
+        Rigidbody newSegmentRb = newSegment.GetComponent<Rigidbody>();
+
+        // Add to the list
+        bodySegments.Insert(bodySegments.Count - 1, newSegmentRb);
+
+        // Update or add a character joint
+        CharacterJoint joint = newSegment.GetComponent<CharacterJoint>();
+        joint.connectedBody = lastSegment;
+
+        // Update the end piece to connect to the new segment
+        Rigidbody endPiece = bodySegments[bodySegments.Count - 1];
+        // Update the end piece to connect to the new segment
+        CharacterJoint endJoint = endPiece.GetComponent<CharacterJoint>();
+        if (endJoint != null) {
+            endJoint.connectedBody = null;  // Force Unity to unregister the old connection
+            endJoint.connectedBody = newSegmentRb;  // Then reconnect to the new segment
+        }
+        Physics.SyncTransforms(); // Call this right after updating joint connections
+
+
+        // Ensure the end piece position and rotation are correctly adjusted
+        endPiece.transform.position = newSegmentRb.position - newSegmentRb.transform.forward * 1f;
+
+        // Update movement force as needed
+        UpdateMovementForce();
+        
+    }
+
+
+    void OnTriggerEnter(Collider other) {
+        if (other.CompareTag("Target")) {  // Assuming "Target" is the tag of the object to trigger segment addition
+            AddSegment();
+            other.gameObject.SetActive(false);
+         
+        }
+    }
+
 
 
 }
