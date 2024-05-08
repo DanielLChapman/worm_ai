@@ -19,6 +19,8 @@ public class WormPhysics : MonoBehaviour
     public float baseMovementForce = 15f;
     public float segmentDecrementFactor = 0.1f;
     private float currentMovementForce;
+    public float baseHeadMass = 10f;
+    public float baseMaxSpeed = 25f;
     public float maxSpeed = 20f;  // Maximum speed that worm can reach
     public float accelerationRate = 0.2f;  // Rate at which speed increases
     private float currentSpeed;  // Current speed of the worm
@@ -54,7 +56,8 @@ public class WormPhysics : MonoBehaviour
     void UpdateMovementForce() {
         currentMovementForce = baseMovementForce + (bodySegments.Count * segmentDecrementFactor);
         currentMovementForce = Mathf.Max(currentMovementForce, 5); // Ensure there's a minimum force
-        wormHead.mass = wormHead.mass + bodySegments.Count;
+        wormHead.mass = baseHeadMass + bodySegments.Count;
+        maxSpeed = baseMaxSpeed + bodySegments.Count * 2;
     }
     
     void AdjustRotation() {
@@ -103,32 +106,19 @@ public class WormPhysics : MonoBehaviour
 
     void AddSegment() {
         // Find the last segment before the end piece
-        Rigidbody lastSegment = bodySegments[bodySegments.Count - 2];
+        Rigidbody lastSegment = bodySegments[bodySegments.Count - 1];
 
         // Instantiate the new segment
         GameObject newSegment = Instantiate(segmentPrefab, lastSegment.position - lastSegment.transform.forward * 0.2f, Quaternion.identity);
         Rigidbody newSegmentRb = newSegment.GetComponent<Rigidbody>();
+        newSegmentRb.transform.rotation = lastSegment.transform.rotation;
 
         // Add to the list
-        bodySegments.Insert(bodySegments.Count - 1, newSegmentRb);
+        bodySegments.Insert(bodySegments.Count, newSegmentRb);
 
         // Update or add a character joint
         CharacterJoint joint = newSegment.GetComponent<CharacterJoint>();
         joint.connectedBody = lastSegment;
-
-        // Update the end piece to connect to the new segment
-        Rigidbody endPiece = bodySegments[bodySegments.Count - 1];
-        // Update the end piece to connect to the new segment
-        CharacterJoint endJoint = endPiece.GetComponent<CharacterJoint>();
-        if (endJoint != null) {
-            endJoint.connectedBody = null;  // Force Unity to unregister the old connection
-            endJoint.connectedBody = newSegmentRb;  // Then reconnect to the new segment
-        }
-        Physics.SyncTransforms(); // Call this right after updating joint connections
-
-
-        // Ensure the end piece position and rotation are correctly adjusted
-        endPiece.transform.position = newSegmentRb.position - newSegmentRb.transform.forward * 1f;
 
         // Update movement force as needed
         UpdateMovementForce();
@@ -139,9 +129,37 @@ public class WormPhysics : MonoBehaviour
     void OnTriggerEnter(Collider other) {
         if (other.CompareTag("Target")) {  // Assuming "Target" is the tag of the object to trigger segment addition
             AddSegment();
-            other.gameObject.SetActive(false);
+            RepositionTarget(other.gameObject);
          
         }
+    }
+
+    void RepositionTarget(GameObject target) {
+        float terrainWidth = 125f;  // Assuming the terrain is 125 units wide
+        float terrainLength = 125f;  // Assuming the terrain is 125 units long
+
+        Vector3 newPosition = new Vector3(
+            Random.Range(0, terrainWidth / 2),
+            0, // This will be set by the terrain height
+            Random.Range(0, terrainLength / 2)
+        );
+
+        newPosition.y = GetTerrainHeight(newPosition) + 0.5f; // Ensure the target is slightly above the terrain to avoid clipping
+        target.transform.position = newPosition;
+    }
+
+
+    float GetTerrainHeight(Vector3 position) {
+        // If using Unity Terrain, you can directly access the height at a position:
+        // return Terrain.activeTerrain.SampleHeight(position) + Terrain.activeTerrain.transform.position.y;
+
+        // Using raycasting:
+        RaycastHit hit;
+        if (Physics.Raycast(new Vector3(position.x, 1000f, position.z), Vector3.down, out hit, Mathf.Infinity, LayerMask.GetMask("Terrain"))) {
+            return hit.point.y;  // Return the y position of the terrain hit
+        }
+
+        return 0f;  // Default to 0 if no terrain was hit (adjust as needed)
     }
 
 
